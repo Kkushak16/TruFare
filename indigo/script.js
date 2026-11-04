@@ -5,7 +5,38 @@
     { id: 'akasa', airline: 'Akasa Air', code: 'QP 1409', color: '#f27835', depart: '14:10', arrive: '16:20', fare: 6891, student: 6202, saved: 689, mark: 'QP' }
   ];
   const rupees = value => `₹${value.toLocaleString('en-IN')}`;
+  const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
   let student = true, selected = flights[0], liked = new Set(), view = 'search', trip = 'Return', navKey = 'book';
+
+  function prepareTyping(element, interval, startDelay) {
+    element.setAttribute('aria-label', element.innerText.trim());
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    const textNodes = [];
+    while (walker.nextNode()) textNodes.push(walker.currentNode);
+    let index = 0;
+    for (const textNode of textNodes) {
+      const fragment = document.createDocumentFragment();
+      for (const part of textNode.textContent.split(/(\s+)/)) {
+        if (/^\s+$/.test(part)) {
+          fragment.append(document.createTextNode(part));
+          index += part.length;
+          continue;
+        }
+        const word = document.createElement('span');
+        word.className = 'hero-word';
+        for (const character of part) {
+          const letter = document.createElement('span');
+          letter.className = 'hero-letter';
+          letter.setAttribute('aria-hidden', 'true');
+          letter.style.setProperty('--typing-delay', `${startDelay + index++ * interval}ms`);
+          letter.textContent = character;
+          word.append(letter);
+        }
+        fragment.append(word);
+      }
+      textNode.replaceWith(fragment);
+    }
+  }
 
   const plane = '<span aria-hidden="true">✈</span>';
   const introVideo = 'https://cdn.21st.dev/assets/mirror/21/21a77eac28eacbb7e142016eefeaa0b4a766619e51113629a3bc6df6af066c0f.mp4';
@@ -25,12 +56,15 @@
 
   function reviewView() { const price = student ? selected.student : selected.fare, tax = Math.round(price * .05), total = price + 399 + tax; return `<div class="review-page"><button class="back-link" data-view="results">← &nbsp;Back to flights</button><div class="review-title"><div><span>FINAL STEP</span><h1>Review your trip</h1><p>Confirm the details below before continuing.</p></div><div class="stepper"><span class="done">1</span><i></i><span>2</span><i></i><span>3</span><small>Flight</small><small>Details</small><small>Payment</small></div></div><div class="review-grid"><div class="review-content"><section class="review-card ticket"><div class="ticket-top"><div class="airline"><span style="background:${selected.color}">${selected.mark}</span><div><b>${selected.airline}</b><small>${selected.code} · Economy</small></div></div><span class="direct-tag">DIRECT</span></div><div class="ticket-route"><div><strong>${selected.depart}</strong><b>Delhi</b><small>DEL · Terminal 2</small></div><div class="route-mid"><small>2h 10m</small>${plane}<span>25 OCT 2026</span></div><div><strong>${selected.arrive}</strong><b>Mumbai</b><small>BOM · Terminal 1</small></div></div><div class="ticket-foot"><span>▦ Sunday, 25 October</span><span>▣ 15 kg checked baggage</span></div></section><section class="review-card traveller"><div class="section-heading"><span>1</span><div><h2>Traveller details</h2><p>Enter details exactly as shown on your government ID.</p></div></div><form id="traveller-form"><div class="input-grid"><label>First name<input required placeholder="e.g. Aarya"></label><label>Last name<input required placeholder="e.g. Mehta"></label><label>Email address<input required type="email" placeholder="aarya@example.com"></label><label>Mobile number<div class="phone"><span>+91</span><input required inputmode="numeric" pattern="[0-9 ]{10,12}" placeholder="98765 43210"></div></label></div></form><div class="safe-note">♢ <div><b>Your details stay private</b><span>This demo does not process a booking or payment.</span></div></div></section></div><aside class="price-card"><h2>Fare summary</h2><div class="price-route"><span>${selected.airline}</span><b>DEL → BOM</b></div><dl><div><dt>${student ? 'Student' : 'Standard'} fare</dt><dd>${rupees(price)}</dd></div><div><dt>Airline charges</dt><dd>${rupees(399)}</dd></div><div><dt>Taxes (sample)</dt><dd>${rupees(tax)}</dd></div>${student ? `<div class="discount"><dt>Student savings</dt><dd>−${rupees(selected.saved)}</dd></div>` : ''}</dl><div class="total"><span>Total</span><strong>${rupees(total)}</strong><small>for 1 traveller</small></div><button type="submit" form="traveller-form">Continue to payment →</button><p>♢ &nbsp;No actual payment is processed</p></aside></div></div>`; }
 
-  function introMarkup() { return `<div class="intro-hero" aria-label="TrueFare introduction"><video class="intro-video" muted playsinline preload="auto" src="${introVideo}"></video><div class="intro-shade"></div><div class="intro-title"><span>Welcome to TrueFare</span></div><div class="intro-tagline"><span>Every door in the city is already open.</span></div><div class="intro-hint"><span>SCROLL</span><span class="intro-arrow">↓</span></div><div class="intro-progress"><i></i></div><span class="intro-credit">A clearer way to fly</span></div>`; }
+  function introMarkup() { return `<div class="intro-hero" aria-label="TrueFare introduction"><video class="intro-video" muted playsinline preload="auto" src="${introVideo}"></video><div class="intro-shade"></div><div class="intro-title"><span>Welcome to TrueFare</span></div><div class="intro-tagline"><span>Every flight to your city.</span></div><div class="intro-hint"><span>SCROLL</span><span class="intro-arrow">↓</span></div><div class="intro-progress"><i></i></div><span class="intro-credit">A clearer way to fly</span></div>`; }
 
   function startIntro() {
     render();
     const app = document.querySelector('.app-shell');
     if (!app) return;
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (reduceMotion) return;
+    app.classList.add('app-shell--intro');
     app.insertAdjacentHTML('afterbegin', introMarkup());
     const intro = app.querySelector('.intro-hero');
     const video = app.querySelector('.intro-video');
@@ -40,22 +74,104 @@
     const progressBar = app.querySelector('.intro-progress i');
     if (!intro || !video || !title || !tagline || !hint || !progressBar) return;
 
-    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
     const scrubDistance = 3200;
-    let duration = 0, target = reduceMotion ? 1 : 0, current = target, raf = 0, touchY = 0, done = false, seeking = false, pending = null;
+    let duration = 0, target = 0, current = 0, raf = 0, touchY = 0, done = false, seeking = false, pending = null, lastFrame = 0, lastSeekAt = 0;
     document.body.classList.add('intro-active');
-    const setTime = time => { if (seeking) { pending = time; return; } seeking = true; video.currentTime = time; };
+    const setTime = time => { if (seeking) { pending = time; return; } if (Math.abs(video.currentTime - time) < 0.035) return; seeking = true; video.currentTime = time; };
     const onSeeked = () => { seeking = false; if (pending !== null) { const time = pending; pending = null; setTime(time); } };
-    const onLoaded = () => { duration = video.duration || 0; video.currentTime = duration * current; };
+    const onLoaded = () => { duration = video.duration || 0; setTime(duration * current); };
     const addDelta = delta => { if (done || !Number.isFinite(delta)) return; target = clamp(target + delta / scrubDistance, 0, 1); };
     const onWheel = event => { event.preventDefault(); addDelta(event.deltaY); };
     const onTouchStart = event => { touchY = event.touches[0]?.clientY || 0; };
     const onTouchMove = event => { if(event.cancelable) event.preventDefault(); const y = event.touches[0]?.clientY || touchY; addDelta(touchY - y); touchY = y; };
-    const finish = () => { if (done) return; done = true; intro.classList.add('intro-exiting'); document.body.classList.remove('intro-active'); window.removeEventListener('wheel', onWheel); window.removeEventListener('touchstart', onTouchStart); window.removeEventListener('touchmove', onTouchMove); cancelAnimationFrame(raf); setTimeout(() => intro.remove(), 720); };
-    const frame = () => { current += (target - current) * 0.16; if (duration) setTime(current * duration); const titleT = 1 - clamp(current / .35, 0, 1); const taglineT = clamp((current - .78) / .22, 0, 1); title.style.opacity = titleT; title.style.transform = `translateY(${(1 - titleT) * -24}px) scale(${.96 + titleT * .04})`; title.style.filter = `blur(${(1 - titleT) * 10}px)`; tagline.style.opacity = taglineT; tagline.style.transform = `translateY(${(1 - taglineT) * 20}px) scale(${.97 + taglineT * .03})`; tagline.style.filter = `blur(${(1 - taglineT) * 8}px)`; hint.style.opacity = current > .002 ? '0' : '1'; progressBar.style.transform = `scaleX(${current})`; if (!reduceMotion && target >= 1 && current > .995) finish(); else raf = requestAnimationFrame(frame); };
+    const removeScrollListeners = () => { window.removeEventListener('wheel', onWheel); window.removeEventListener('touchstart', onTouchStart); window.removeEventListener('touchmove', onTouchMove); };
+    const revealHomepage = async () => {
+      const brand = app.querySelector('.topbar .brand');
+      const destination = brand.getBoundingClientRect();
+      const start = {
+        left: (window.innerWidth - destination.width) / 2,
+        top: (window.innerHeight - destination.height) / 2
+      };
+      brand.style.position = 'fixed';
+      brand.style.left = `${start.left}px`;
+      brand.style.top = `${start.top}px`;
+      brand.style.width = `${destination.width}px`;
+      brand.style.height = `${destination.height}px`;
+      brand.style.margin = '0';
+      brand.style.zIndex = '130';
+      brand.style.transformOrigin = 'center';
+      brand.style.color = 'var(--navy)';
+      brand.classList.add('intro-morphing');
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      const popIn = brand.animate([
+        { opacity: 0, transform: 'scale(.88)' },
+        { opacity: 1, transform: 'scale(1.35)' }
+      ], { duration: 620, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'forwards' });
+      await popIn.finished;
+      brand.style.opacity = '1';
+      brand.style.transform = 'scale(1.35)';
+      popIn.cancel();
+
+      app.classList.add('is-forming');
+      intro.classList.add('intro-home-reveal');
+      const travelX = destination.left - start.left;
+      const travelY = destination.top - start.top;
+      const travel = brand.animate([
+        { transform: 'scale(1.35)' },
+        { transform: `translate3d(${travelX}px,${travelY}px,0) scale(1)` }
+      ], { duration: 1250, easing: 'cubic-bezier(.22,1,.36,1)', fill: 'forwards' });
+      await travel.finished;
+      brand.style.left = `${destination.left}px`;
+      brand.style.top = `${destination.top}px`;
+      brand.style.transform = 'none';
+      travel.cancel();
+
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      prepareTyping(app.querySelector('.hero-copy h1'), 28, 500);
+      prepareTyping(app.querySelector('.hero-copy p'), 14, 1350);
+      brand.style.removeProperty('color');
+      app.classList.add('is-revealing');
+      await new Promise(resolve => setTimeout(resolve, 950));
+
+      brand.classList.remove('intro-morphing');
+      brand.removeAttribute('style');
+      intro.remove();
+      await new Promise(resolve => setTimeout(resolve, 2800));
+      app.classList.remove('app-shell--intro', 'is-forming', 'is-revealing');
+      document.body.classList.remove('intro-active');
+    };
+    const finish = () => {
+      if (done) return;
+      done = true;
+      removeScrollListeners();
+      cancelAnimationFrame(raf);
+      video.pause();
+      progressBar.style.transform = 'scaleX(1)';
+      title.style.transition = 'opacity .4s ease';
+      tagline.style.transition = 'opacity .4s ease';
+      title.style.opacity = '0';
+      tagline.style.opacity = '0';
+      intro.classList.add('intro-white');
+      setTimeout(() => { void revealHomepage(); }, 500);
+    };
+    const frame = timestamp => {
+      const delta = lastFrame ? timestamp - lastFrame : 16.67;
+      lastFrame = timestamp;
+      current += (target - current) * (1 - Math.exp(-delta / 100));
+      if (duration && timestamp - lastSeekAt >= 50) { lastSeekAt = timestamp; setTime(current * duration); }
+      const titleT = 1 - clamp(current / .35, 0, 1);
+      const taglineT = clamp((current - .78) / .22, 0, 1);
+      title.style.opacity = titleT;
+      title.style.transform = `translateY(${(1 - titleT) * -24}px) scale(${.96 + titleT * .04})`;
+      tagline.style.opacity = taglineT;
+      tagline.style.transform = `translateY(${(1 - taglineT) * 20}px) scale(${.97 + taglineT * .03})`;
+      hint.style.opacity = current > .002 ? '0' : '1';
+      progressBar.style.transform = `scaleX(${current})`;
+      if (target >= 1 && current > .995) finish();
+      else raf = requestAnimationFrame(frame);
+    };
     video.addEventListener('loadedmetadata', onLoaded); video.addEventListener('seeked', onSeeked); video.addEventListener('error', () => { duration = 0; }); window.addEventListener('wheel', onWheel, { passive: false }); window.addEventListener('touchstart', onTouchStart, { passive: true }); window.addEventListener('touchmove', onTouchMove, { passive: false });
-    video.play().then(() => video.pause()).catch(() => {});
-    if (reduceMotion) { setTimeout(finish, 350); } else raf = requestAnimationFrame(frame);
+    raf = requestAnimationFrame(frame);
   }
 
   function render() { document.querySelector('.app-shell').innerHTML = header() + (view === 'search' ? searchView() : view === 'results' ? resultsView() : reviewView()) + footer; window.scrollTo({ top: 0, behavior: 'smooth' }); }
